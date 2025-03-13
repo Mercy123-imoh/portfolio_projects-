@@ -42,7 +42,7 @@ COMMIT;
 
 
 
--- All the SQL Queries written during the video
+-- All the SQL Queries written 
 
 select * from product;
 
