@@ -114,7 +114,90 @@ on t1.salesRepEmployeeNumber = t3.employeeNumber)
 
 select *  
 from main_cte
-where  rep_ordernumber = 2
+where  rep_ordernumber = 2;
+
+with main_cte as 
+(
+select 
+t1.orderdate, 
+t2.customerNumber, 
+t1.ordernumber,
+customerName, 
+productCode,
+creditLimit, 
+quantityOrdered * priceEach as sales_value
+from orders t1
+inner join customers t2 
+on t1.customerNumber = t2.customerNumber 
+inner join orderdetails t4 
+on t1.orderNumber = t4.orderNumber
+),
+running_total_sales_cte as 
+(
+select *, lead (orderdate) over (partition by customernumber order by orderdate) as next_order_date
+from
+(
+select 
+orderdate,
+ordernumber, 
+customerNumber, 
+customerName, 
+creditLimit,
+sum(sales_value) as sales_value
+from main_cte 
+group by  orderdate,  
+creditLimit,
+customerName, 
+customerNumber,
+ordernumber
+)subquery
+),
+
+payments_cte as 
+(
+select *
+from payments
+group by customerNumber, paymentDate, amount, checkNumber
+),
+
+main_one_cte as
+(
+select t1.*, 
+row_number () over (partition by t1.customernumber order by orderdate) as purchase_num, 
+sum(sales_value) over (partition by t1.customernumber order by orderdate) as running_total_sales,
+sum(amount) over (partition by t1.customerNumber order by orderdate) as running_total_payments
+from running_total_sales_cte t1
+left join payments_cte t2 
+on t1.customernumber = t2.customernumber and t2.paymentdate between t1.orderdate and 
+case when t1.next_order_date is null then current_date else next_order_date end
+) 
+
+select *, running_total_sales - running_total_payments as money_owed, 
+creditlimit - (running_total_sales - running_total_payments ) as difference
+from main_one_cte; 
+
+with sales as 
+(
+select t1.orderNumber,t1.customerNumber,productCode, quantityOrdered, priceEach, priceEach * quantityOrdered as sales_value, creditLimit
+from orders t1 
+inner join orderdetails t2 
+on t1.orderNumber = t2.orderNumber
+inner join customers t3 
+on t1.customerNumber = t3.customerNumber
+)
+select ordernumber, customernumber, sum(sales_value) as sales_value, 
+case when creditlimit < 75000 then 'a; less than $75k'
+when creditlimit between 75000 and 100000 then 'b; $75k - $100k'
+when creditlimit between 100000 and 150000 then 'c; $100k - $150k' 
+when creditlimit > 150000 then 'd; above $150k'
+else 'other' end as creditlimit_grp
+from sales 
+group by ordernumber, customernumber, creditlimit_grp;
+
+
+
+
+
 
 
 
